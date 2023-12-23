@@ -49,7 +49,7 @@ def update_image(threshold):
         canvas.itemconfig(img_label, image=photo)
 
 def start_drawing(event):
-    global lastx, lasty, mask_draw
+    global lastx, lasty
     lastx, lasty = event.x, event.y
     print("Start drawing at", lastx, lasty)
     draw(event)
@@ -68,7 +68,7 @@ def draw_on_mask(x, y):
         mask_draw.line([lastx - img_x, lasty - img_y, adj_x, adj_y], fill="black", width=5)
 
 def draw_on_boolean_mask(x, y):
-    global lastx, lasty
+    global lastx, lasty, mask_draw
 
     if original_image is None:
         return
