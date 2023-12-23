@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk, ImageDraw
 import random
 import numpy as np
+from coordinates import canvas_to_full_img_coords, get_image_position_in_canvas, canvas_coords_to_img_coords
 
 def remove_white_background(image, mask, threshold, random_color=False):
     """
@@ -21,7 +22,6 @@ def remove_white_background(image, mask, threshold, random_color=False):
     img = image.convert("RGBA")
     datas = img.getdata()
     mask_data = mask.getdata()
-    # mask_data = boolean_mask.getdata()
 
     newData = []
     for i, item in enumerate(datas):
@@ -54,32 +54,6 @@ def start_drawing(event):
     print("Start drawing at", lastx, lasty)
     draw(event)
 
-def get_image_position_in_canvas(canvas, img_size):
-    """
-    Calculate the position of the image in the canvas.
-    Returns the top-left corner (x, y).
-    """
-    canvas_width = canvas.winfo_width()
-    canvas_height = canvas.winfo_height()
-    x = (canvas_width - img_size[0]) // 2
-    y = (canvas_height - img_size[1]) // 2
-    return x, y
-
-def canvas_coords_to_img_coords(canvas, x, y):
-    """
-    Convert canvas coordinates to image coordinates.
-    Returns the image coordinates (x, y).
-    """
-    global image
-    img_x, img_y = get_image_position_in_canvas(canvas, image.size)
-    # Adjust the coordinates relative to the image position
-    adj_x = x - img_x
-    adj_y = y - img_y
-    # Ensure adjusted coordinates are within the image boundaries
-    if 0 <= adj_x < image.size[0] and 0 <= adj_y < image.size[1]:
-        return adj_x, adj_y
-    return None, None
-
 def draw_on_mask(x, y):
     global lastx, lasty, mask_draw, mask_canvas, image
     if image is None:
@@ -93,52 +67,6 @@ def draw_on_mask(x, y):
     if 0 <= adj_x < image.size[0] and 0 <= adj_y < image.size[1]:
         mask_draw.line([lastx - img_x, lasty - img_y, adj_x, adj_y], fill="black", width=5)
 
-def full_img_to_canvas_coords(x, y):
-    global image, mask_canvas
-    img_x, img_y = get_image_position_in_canvas(mask_canvas, image.size)
-    # Adjust the coordinates relative to the image position
-    adj_x = x - img_x
-    adj_y = y - img_y
-    return adj_x, adj_y
-
-def img_coords_to_resized_img_coords(x, y):
-    global image
-    resized_x = int(x * image.width / original_image.size[0])
-    resized_y = int(y * image.height / original_image.size[1])
-    print(f"{x}, {y} -> {resized_x}, {resized_y}")
-    print(f"{x*min_scale_factor}, {y*min_scale_factor}")
-    return resized_x, resized_y
-
-def resized_img_coords_to_img_coords(x, y):
-    global image
-    img_x = int(x * original_image.size[0] / image.width)
-    img_y = int(y * original_image.size[1] / image.height)
-    return img_x, img_y
-
-def center_coords(x, y):
-    global image
-    center_x = x - image.width / 2
-    center_y = y - image.height / 2
-    return center_x, center_y
-
-def unzoom_coords(x, y, zoom_level):
-    unzoom_x = x / zoom_level
-    unzoom_y = y / zoom_level
-    return unzoom_x, unzoom_y
-
-def canvas_to_full_img_coords(x, y):
-    global zoom_center, zoom_level, min_scale_factor, zoom_level
-    x, y = canvas_coords_to_img_coords(canvas, x, y)
-    if x is None or y is None:
-        return None, None
-    x, y = max(0, x), max(0, y)
-    x, y = min(x, image.width), min(y, image.height)
-    center_x, center_y = center_coords(x, y)
-    unzoom_x, unzoom_y = unzoom_coords(center_x, center_y, zoom_level)
-    img_x, img_y = resized_img_coords_to_img_coords(unzoom_x, unzoom_y)
-    full_img_x, full_img_y = img_x + zoom_center[0], img_y + zoom_center[1]
-    return int(full_img_x), int(full_img_y)
-
 def draw_on_boolean_mask(x, y):
     global lastx, lasty
 
@@ -146,8 +74,8 @@ def draw_on_boolean_mask(x, y):
         return
 
     # Translate canvas coordinates to full image coordinates
-    full_img_x, full_img_y = canvas_to_full_img_coords(x, y)
-    last_full_img_x, last_full_img_y = canvas_to_full_img_coords(lastx, lasty)
+    full_img_x, full_img_y = canvas_to_full_img_coords(canvas, original_image, image, zoom_level, zoom_center, x, y)
+    last_full_img_x, last_full_img_y = canvas_to_full_img_coords(canvas, original_image, image, zoom_level, zoom_center, lastx, lasty)
 
     # Draw on the boolean mask
     mask_draw.line([last_full_img_x, last_full_img_y, full_img_x, full_img_y], fill=0, width=5)
@@ -157,7 +85,7 @@ def draw_on_boolean_mask(x, y):
 def update_mask_display():
     global mask, mask_photo, mask_canvas, mask_canvas_image, boolean_mask, max_size
     # Crop the mask to the current view
-    mask = resize_image(boolean_mask.crop((left, upper, right, lower)), max_size)  # Crop to current view
+    mask = resize_image(boolean_mask.crop((left, upper, right, lower)), max_size)
     # print((left, upper, right, lower))
     mask_photo = ImageTk.PhotoImage(mask)
     mask_canvas.itemconfig(mask_canvas_image, image=mask_photo)
@@ -262,7 +190,7 @@ canvas.bind("<B1-Motion>", draw)
 def handle_zoom(event):
     global max_scale_factor, min_scale_factor, scale_factor, zoom_center, zoom_level
     print("Mousewheel event at", event.x, event.y, event.delta)
-    x, y = canvas_to_full_img_coords(event.x, event.y)
+    x, y = canvas_to_full_img_coords(canvas, original_image, image, zoom_level, zoom_center, event.x, event.y)
     zoom_level += 0.1 if event.delta > 0 else -0.1  # Zoom in for positive delta, out for negative
     zoom_level = max(1.0, min(25, zoom_level))
     # scale_factor = 1.25 if event.delta > 0 else 0.8  # Zoom in for positive delta, out for negative
@@ -419,10 +347,10 @@ def display_mouse_position(event):
     img_x, img_y = get_image_position_in_canvas(canvas, image.size)
 
     # Other Image coordinates
-    adj_x, adj_y = canvas_coords_to_img_coords(canvas, canvas_x, canvas_y)
+    adj_x, adj_y = canvas_coords_to_img_coords(canvas, image, canvas_x, canvas_y)
 
     # Zoomed coordinates
-    zoomed_x, zoomed_y = canvas_to_full_img_coords(canvas_x, canvas_y)
+    zoomed_x, zoomed_y = canvas_to_full_img_coords(canvas, original_image, image, zoom_level, zoom_center, canvas_x, canvas_y)
 
     # Original image coordinates
     if zoomed_x is None or zoomed_y is None:
